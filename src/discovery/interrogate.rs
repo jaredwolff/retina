@@ -530,6 +530,7 @@ struct ProfileInfo {
     name: String,
     video_encoding: VideoEncoding,
     resolution: Resolution,
+    framerate: Option<f32>,
 }
 
 /// Parse GetProfiles response
@@ -537,16 +538,22 @@ fn parse_profiles_response(xml: &str) -> Result<Vec<ProfileInfo>, InterrogationE
     use quick_xml::events::Event;
     use quick_xml::Reader;
 
+    log::debug!("Profile: {:?}", xml);
+
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
 
     let mut profiles = Vec::new();
     let mut in_profile = false;
+    let mut in_video_encoder_config = false;
+    let mut in_rate_control = false;
+    let mut current_element = String::new();
     let mut current_profile = ProfileInfo {
         token: String::new(),
         name: String::new(),
         video_encoding: VideoEncoding::H264,
         resolution: Resolution::new(1920, 1080),
+        framerate: None,
     };
 
     log::debug!("Parsing GetProfiles response");
@@ -556,14 +563,16 @@ fn parse_profiles_response(xml: &str) -> Result<Vec<ProfileInfo>, InterrogationE
             Ok(Event::Start(ref e)) => {
                 let name = e.name();
                 let name_str = std::str::from_utf8(name.as_ref()).unwrap_or("");
+                current_element = name_str.to_string();
 
-                if name_str == "Profiles" || name_str == "trt:Profiles" {
+                if name_str == "Profiles" || name_str.ends_with(":Profiles") {
                     in_profile = true;
                     current_profile = ProfileInfo {
                         token: String::new(),
                         name: String::new(),
                         video_encoding: VideoEncoding::H264,
                         resolution: Resolution::new(1920, 1080),
+                        framerate: None,
                     };
 
                     // Extract token from attributes
@@ -578,14 +587,37 @@ fn parse_profiles_response(xml: &str) -> Result<Vec<ProfileInfo>, InterrogationE
                             }
                         }
                     }
+                } else if in_profile
+                    && (name_str == "VideoEncoderConfiguration"
+                        || name_str.ends_with(":VideoEncoderConfiguration"))
+                {
+                    in_video_encoder_config = true;
+                } else if in_video_encoder_config
+                    && (name_str == "RateControl" || name_str.ends_with(":RateControl"))
+                {
+                    in_rate_control = true;
                 }
             }
             Ok(Event::Text(e)) => {
                 if in_profile {
                     if let Ok(text) = e.unescape() {
                         let text_str = text.as_ref().trim();
-                        if !text_str.is_empty() && current_profile.name.is_empty() {
-                            current_profile.name = text_str.to_string();
+                        if !text_str.is_empty() {
+                            if current_profile.name.is_empty() && !in_video_encoder_config {
+                                current_profile.name = text_str.to_string();
+                            } else if in_rate_control
+                                && (current_element == "FrameRateLimit"
+                                    || current_element.ends_with(":FrameRateLimit"))
+                            {
+                                if let Ok(fps) = text_str.parse::<f32>() {
+                                    current_profile.framerate = Some(fps);
+                                    log::debug!(
+                                        "Found framerate: {} for profile {}",
+                                        fps,
+                                        current_profile.token
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -594,20 +626,28 @@ fn parse_profiles_response(xml: &str) -> Result<Vec<ProfileInfo>, InterrogationE
                 let name = e.name();
                 let name_str = std::str::from_utf8(name.as_ref()).unwrap_or("");
 
-                if name_str == "Profiles" || name_str == "trt:Profiles" {
+                if name_str == "Profiles" || name_str.ends_with(":Profiles") {
                     if in_profile && !current_profile.token.is_empty() {
                         if current_profile.name.is_empty() {
                             current_profile.name = format!("Profile_{}", current_profile.token);
                         }
                         log::debug!(
-                            "Adding profile: {} (token: {})",
+                            "Adding profile: {} (token: {}, framerate: {:?})",
                             current_profile.name,
-                            current_profile.token
+                            current_profile.token,
+                            current_profile.framerate
                         );
                         profiles.push(current_profile.clone());
                     }
                     in_profile = false;
+                } else if name_str == "VideoEncoderConfiguration"
+                    || name_str.ends_with(":VideoEncoderConfiguration")
+                {
+                    in_video_encoder_config = false;
+                } else if name_str == "RateControl" || name_str.ends_with(":RateControl") {
+                    in_rate_control = false;
                 }
+                current_element.clear();
             }
             Ok(Event::Eof) => break,
             Err(e) => {
@@ -636,6 +676,7 @@ fn parse_profiles_response(xml: &str) -> Result<Vec<ProfileInfo>, InterrogationE
                                 name: format!("Profile_{}", token),
                                 video_encoding: VideoEncoding::H264,
                                 resolution: Resolution::new(1920, 1080),
+                                framerate: None,
                             });
                             log::debug!("Found profile token via fallback: {}", token);
                         }
@@ -914,7 +955,7 @@ fn parse_stream_uri_response(
         rtsp_url,
         video_encoding: profile.video_encoding.clone(),
         resolution: profile.resolution.clone(),
-        framerate: Some(30.0), // Default assumption
+        framerate: profile.framerate.or(Some(30.0)), // Use profile framerate or default
         bitrate: None,
         stream_type,
         audio_encoding: None,
@@ -982,6 +1023,64 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_profiles_response_with_framerate() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+    <SOAP-ENV:Header></SOAP-ENV:Header>
+    <SOAP-ENV:Body>
+        <trt:GetProfilesResponse>
+            <trt:Profiles fixed="true" token="media_profile1">
+                <tt:Name>media_profile1</tt:Name>
+                <tt:VideoEncoderConfiguration token="video_encoder_config">
+                    <tt:Name>video_encoder_config</tt:Name>
+                    <tt:Encoding>H264</tt:Encoding>
+                    <tt:Resolution>
+                        <tt:Width>3840</tt:Width>
+                        <tt:Height>2160</tt:Height>
+                    </tt:Resolution>
+                    <tt:RateControl>
+                        <tt:FrameRateLimit>20</tt:FrameRateLimit>
+                        <tt:BitrateLimit>8192</tt:BitrateLimit>
+                    </tt:RateControl>
+                </tt:VideoEncoderConfiguration>
+            </trt:Profiles>
+            <trt:Profiles fixed="true" token="media_profile2">
+                <tt:Name>media_profile2</tt:Name>
+                <tt:VideoEncoderConfiguration token="video_encoder_config2">
+                    <tt:Name>video_encoder_config2</tt:Name>
+                    <tt:Encoding>H264</tt:Encoding>
+                    <tt:Resolution>
+                        <tt:Width>1280</tt:Width>
+                        <tt:Height>720</tt:Height>
+                    </tt:Resolution>
+                    <tt:RateControl>
+                        <tt:FrameRateLimit>5</tt:FrameRateLimit>
+                        <tt:BitrateLimit>1536</tt:BitrateLimit>
+                    </tt:RateControl>
+                </tt:VideoEncoderConfiguration>
+            </trt:Profiles>
+        </trt:GetProfilesResponse>
+    </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>"#;
+
+        let result = parse_profiles_response(xml);
+        assert!(result.is_ok());
+
+        let profiles = result.unwrap();
+        assert_eq!(profiles.len(), 2);
+
+        let profile1 = &profiles[0];
+        assert_eq!(profile1.token, "media_profile1");
+        assert_eq!(profile1.name, "media_profile1");
+        assert_eq!(profile1.framerate, Some(20.0));
+
+        let profile2 = &profiles[1];
+        assert_eq!(profile2.token, "media_profile2");
+        assert_eq!(profile2.name, "media_profile2");
+        assert_eq!(profile2.framerate, Some(5.0));
+    }
+
+    #[test]
     fn test_parse_stream_uri_response() {
         let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
@@ -1002,6 +1101,7 @@ mod tests {
             name: "MainStream".to_string(),
             video_encoding: VideoEncoding::H264,
             resolution: Resolution::new(1920, 1080),
+            framerate: Some(30.0),
         };
 
         let result = parse_stream_uri_response(xml, &profile);
@@ -1039,6 +1139,7 @@ mod tests {
             name: "Profile2".to_string(),
             video_encoding: VideoEncoding::H264,
             resolution: Resolution::new(1920, 1080),
+            framerate: Some(5.0),
         };
 
         let result = parse_stream_uri_response(xml, &profile);
