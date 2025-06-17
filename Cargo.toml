@@ -18,6 +18,7 @@ rust-version = "1.79"
 [features]
 default = ["h265"]
 h265 = []
+discovery = ["quick-xml", "uuid", "serde", "sha1"]
 
 [package.metadata.docs.rs]
 # https://docs.rs/about/metadata
@@ -43,15 +44,23 @@ rtsp-types = "0.1.0"
 sdp-types = "0.1.4"
 smallvec = { version = "1.6.1", features = ["union"] }
 thiserror = "1.0.25"
-tokio = { version = "1.11.0", features = ["macros", "net", "rt", "time"] }
+tokio = { version = "1.11.0", features = ["macros", "net", "rt", "time", "io-util"] }
 tokio-util = { version = "0.7.3", features = ["codec"] }
 url = "2.2.1"
+
+# Discovery feature dependencies
+quick-xml = { version = "0.31", optional = true }
+uuid = { version = "1.0", optional = true, features = ["v4"] }
+serde = { version = "1.0", optional = true, features = ["derive"] }
+sha1 = { version = "0.10", optional = true }
+chrono = "0.4.41"
 
 [dev-dependencies]
 criterion = { version = "0.5.0", features = ["async_tokio"] }
 mylog = { git = "https://github.com/scottlamb/mylog" }
 pretty_assertions = "1.4.1"
 tokio = { version = "1.5.0", features = ["io-util", "macros", "rt-multi-thread", "test-util"] }
+env_logger = "0.10"
 
 [profile.bench]
 debug = true
@@ -63,3 +72,7 @@ harness = false
 [[bench]]
 name = "depacketize"
 harness = false
+
+[[example]]
+name = "discovery"
+required-features = ["discovery"]

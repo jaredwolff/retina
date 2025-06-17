@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+    <s:Header>
+        <a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches</a:Action>
+        <a:MessageID>urn:uuid:12345678-1234-5678-9abc-123456789abc</a:MessageID>
+        <a:RelatesTo>uuid:a86f9421-b764-4256-8762-5ed0d8602a9c</a:RelatesTo>
+        <a:To>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</a:To>
+    </s:Header>
+    <s:Body>
+        <d:ProbeMatches>
+            <d:ProbeMatch>
+                <a:EndpointReference>
+                    <a:Address>urn:uuid:12345678-1234-5678-9abc-123456789abc</a:Address>
+                </a:EndpointReference>
+                <d:Types>dn:NetworkVideoTransmitter tds:Device</d:Types>
+                <d:Scopes>
+                    onvif://www.onvif.org/type/NetworkVideoTransmitter
+                    onvif://www.onvif.org/Profile/Streaming
+                    onvif://www.onvif.org/MAC/aa:bb:cc:dd:ee:ff
+                    onvif://www.onvif.org/hardware/IPC-HDW2431T-AS
+                    onvif://www.onvif.org/name/Dahua
+                    onvif://www.onvif.org/location/Office
+                </d:Scopes>
+                <d:XAddrs>http://192.168.1.101/onvif/device_service</d:XAddrs>
+                <d:MetadataVersion>5</d:MetadataVersion>
+            </d:ProbeMatch>
+        </d:ProbeMatches>
+    </s:Body>
+</s:Envelope>

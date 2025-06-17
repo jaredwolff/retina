@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+    <s:Header>
+        <a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches</a:Action>
+        <a:MessageID>urn:uuid:cea94000-fb96-11b3-8260-686dbc5cb15d</a:MessageID>
+        <a:RelatesTo>uuid:a86f9421-b764-4256-8762-5ed0d8602a9c</a:RelatesTo>
+        <a:To>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</a:To>
+    </s:Header>
+    <s:Body>
+        <d:ProbeMatches>
+            <d:ProbeMatch>
+                <a:EndpointReference>
+                    <a:Address>urn:uuid:cea94000-fb96-11b3-8260-686dbc5cb15d</a:Address>
+                </a:EndpointReference>
+                <d:Types>dn:NetworkVideoTransmitter tds:Device</d:Types>
+                <d:Scopes>
+                    onvif://www.onvif.org/type/video_encoder
+                    onvif://www.onvif.org/Profile/Streaming
+                    onvif://www.onvif.org/MAC/68:6d:bc:5c:b1:5d
+                    onvif://www.onvif.org/hardware/DS-2CD2143G0-I
+                    onvif://www.onvif.org/name/Hikvision
+                    onvif://www.onvif.org/location/Building1
+                </d:Scopes>
+                <d:XAddrs>http://192.168.12.123/onvif/device_service</d:XAddrs>
+                <d:MetadataVersion>10</d:MetadataVersion>
+            </d:ProbeMatch>
+        </d:ProbeMatches>
+    </s:Body>
+</s:Envelope>

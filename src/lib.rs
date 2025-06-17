@@ -45,6 +45,8 @@ macro_rules! wrap {
 
 pub mod client;
 pub mod codec;
+#[cfg(feature = "discovery")]
+pub mod discovery;
 //mod error;
 mod tokio;
 
