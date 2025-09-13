@@ -221,9 +221,9 @@ async fn get_media_streams(
             profile.token
         );
         let stream_request = if let Some(creds) = credentials {
-            generate_get_stream_uri(&profile.token, Some(&creds.username), Some(&creds.password))
+            generate_get_stream_uri(Some(&creds.username), Some(&creds.password), &profile.token)
         } else {
-            generate_get_stream_uri(&profile.token, None, None)
+            generate_get_stream_uri(None, None, &profile.token)
         };
 
         match send_onvif_request(
