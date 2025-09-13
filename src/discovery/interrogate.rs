@@ -361,7 +361,7 @@ async fn send_onvif_request(
         request_body
     );
 
-    log::info!("{:?}", http_request);
+    log::debug!("{:?}", http_request);
 
     // Connect and send request
     let addr = format!("{}:{}", host, port);
@@ -510,17 +510,6 @@ fn parse_capabilities_response(xml: &str) -> Result<DeviceCapabilities, Interrog
     }
 
     Ok(capabilities)
-}
-
-/// Extract media service URL from capabilities
-fn extract_media_service_url(
-    _capabilities: &DeviceCapabilities,
-) -> Result<String, InterrogationError> {
-    // In a full implementation, this would extract the actual media service URL from capabilities
-    // For now, we'll construct it based on common patterns
-    Err(InterrogationError::ServiceUnavailable(
-        "Media service URL extraction not implemented".to_string(),
-    ))
 }
 
 /// Profile information from GetProfiles
@@ -718,7 +707,6 @@ fn parse_services_response(xml: &str) -> Result<Vec<ServiceInfo>, InterrogationE
     };
 
     // Also try to extract services from a simpler format if the standard format fails
-    let mut found_any_service_elements = false;
 
     loop {
         match reader.read_event() {
@@ -727,7 +715,6 @@ fn parse_services_response(xml: &str) -> Result<Vec<ServiceInfo>, InterrogationE
                 let name_str = std::str::from_utf8(name.as_ref()).unwrap_or("");
 
                 if name_str == "Service" || name_str == "tds:Service" {
-                    found_any_service_elements = true;
                     in_service = true;
                     current_service = ServiceInfo {
                         namespace: String::new(),

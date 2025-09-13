@@ -366,31 +366,6 @@ pub fn generate_get_stream_uri(
     )
 }
 
-/// Generate PTZ GetCapabilities SOAP request
-pub fn generate_ptz_get_capabilities(username: Option<&str>, password: Option<&str>) -> String {
-    let auth_header = if let (Some(user), Some(pass)) = (username, password) {
-        generate_wsse_auth_header(user, pass)
-    } else {
-        String::new()
-    };
-
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<SOAP-ENV:Envelope
-    xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"
-    xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
-    xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-    xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-    <SOAP-ENV:Header>
-        {}
-    </SOAP-ENV:Header>
-    <SOAP-ENV:Body>
-        <tptz:GetCapabilities/>
-    </SOAP-ENV:Body>
-</SOAP-ENV:Envelope>"#,
-        auth_header
-    )
-}
 
 /// Generate WS-Security authentication header
 fn generate_wsse_auth_header(username: &str, password: &str) -> String {
