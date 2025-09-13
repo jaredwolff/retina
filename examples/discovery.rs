@@ -19,7 +19,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("1. Standard discovery (current subnet only)");
     println!("2. Extended discovery (multiple common subnets)");
     println!("3. Custom subnet discovery");
-    println!("Enter choice (1-3, default: 1): ");
+    println!("4. Specific IP addresses");
+    println!("Enter choice (1-4, default: 1): ");
 
     let mut choice = String::new();
     std::io::stdin().read_line(&mut choice)?;
@@ -40,9 +41,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("🌐 Discovering on subnet {}...", subnet);
             discovery::discover_devices_on_subnet(subnet).await?
         }
+        "4" => {
+            println!("📡 Enter IP addresses (comma-separated, e.g., 192.168.3.104,192.168.3.108): ");
+            println!("    Note: For subnet discovery, use option 3 instead");
+            let mut ips_input = String::new();
+            std::io::stdin().read_line(&mut ips_input)?;
+            let input = ips_input.trim();
+            
+            // Check if user entered a subnet notation (contains /)
+            if input.contains('/') {
+                println!("⚠️  Subnet notation detected! Use option 3 for subnet discovery.");
+                println!("    Treating as single IP by removing /24 suffix...");
+                let ip = input.split('/').next().unwrap_or(input);
+                println!("🎯 Discovering at specific IP: {}...", ip);
+                discovery::discover_devices_at_ips(vec![ip]).await?
+            } else {
+                // Parse as individual IPs
+                let ips: Vec<&str> = input.split(',').map(|s| s.trim()).collect();
+                println!("🎯 Discovering at specific IPs: {:?}...", ips);
+                discovery::discover_devices_at_ips(ips).await?
+            }
+        }
         _ => {
-            println!("📡 Using standard discovery...");
-            discovery::discover_devices_timeout(Duration::from_secs(5)).await?
+            println!("📡 Using standard discovery with extended timeout...");
+            discovery::discover_devices_timeout(Duration::from_secs(8)).await?
         }
     };
 
@@ -61,7 +83,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if discovery_results.devices.is_empty() {
         println!("❌ No ONVIF cameras found on the network.");
-        println!("   Make sure cameras are powered on and connected to the same network.");
+        println!("\n📝 Troubleshooting tips:");
+        println!("   1. Make sure cameras are powered on and connected to the network");
+        println!("   2. Check if cameras have ONVIF/WS-Discovery enabled in their settings");
+        println!("   3. Verify no firewall is blocking UDP port 3702");
+        println!("   4. Try option 3 with subnet 192.168.3.0/24 for directed discovery");
+        println!("   5. Try option 4 with specific IPs: 192.168.3.104,192.168.3.108,192.168.3.109,192.168.3.110,192.168.3.111");
+        println!("   6. Some cameras (like GV-TBL8804) may have multicast disabled - check camera settings");
+        println!("\n💡 For GV-TBL8804 cameras, check the web interface for:");
+        println!("   - ONVIF settings (should be enabled)");
+        println!("   - Multicast settings (should be enabled)");
+        println!("   - Network isolation or VLAN settings");
         return Ok(());
     }
 
@@ -98,12 +130,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get credentials from user
     println!("\n🔐 Enter camera credentials (leave empty if no auth required):");
     print!("Username: ");
+    use std::io::Write;
+    std::io::stdout().flush()?;
     let mut username = String::new();
     std::io::stdin().read_line(&mut username)?;
     let username = username.trim();
 
     let credentials = if !username.is_empty() {
         print!("Password: ");
+        std::io::stdout().flush()?;
         let mut password = String::new();
         std::io::stdin().read_line(&mut password)?;
         let password = password.trim();
