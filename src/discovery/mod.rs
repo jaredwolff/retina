@@ -295,7 +295,7 @@ pub async fn discover_devices_extended() -> Result<DiscoveryResults, DiscoveryEr
     ];
 
     discover_with_options(DiscoveryOptions {
-        timeout: Duration::from_secs(8), // Longer timeout for multiple subnets
+        timeout: Duration::from_secs(10), // Longer timeout for multiple subnets
         additional_subnets: common_subnets,
         use_broadcast: true,
         multicast_ttl: 3,
@@ -313,7 +313,26 @@ pub async fn discover_devices_on_subnet(subnet: &str) -> Result<DiscoveryResults
         additional_subnets: vec![subnet.to_string()],
         use_broadcast: true,
         multicast_ttl: 3,
-        timeout: Duration::from_secs(6),
+        timeout: Duration::from_secs(8),
+        ..Default::default()
+    })
+    .await
+}
+
+/// Discover ONVIF devices at specific IP addresses
+///
+/// This sends directed probes to specific IP addresses, useful when you know
+/// where cameras are located but multicast discovery doesn't find them.
+/// Example: discover_devices_at_ips(vec!["192.168.3.104", "192.168.3.108"]).await
+pub async fn discover_devices_at_ips(ips: Vec<&str>) -> Result<DiscoveryResults, DiscoveryError> {
+    // Convert individual IPs to /32 subnets for directed probing
+    let subnets: Vec<String> = ips.iter().map(|ip| format!("{}/32", ip)).collect();
+    
+    discover_with_options(DiscoveryOptions {
+        additional_subnets: subnets,
+        use_broadcast: false,  // No need for broadcast with specific IPs
+        multicast_ttl: 1,      // Direct communication, no need for high TTL
+        timeout: Duration::from_secs(5),
         ..Default::default()
     })
     .await

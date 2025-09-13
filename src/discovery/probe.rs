@@ -47,15 +47,25 @@ pub async fn discover_devices_multicast(
 
     log::debug!("Sending WS-Discovery probe to {}", multicast_addr);
 
-    if let Err(e) = socket
-        .send_to(probe_message.as_bytes(), multicast_addr)
-        .await
-    {
-        errors.push(format!("Failed to send multicast probe: {}", e));
+    // Send multiple multicast probes with small delays to increase response rate
+    for i in 0..3 {
+        if let Err(e) = socket
+            .send_to(probe_message.as_bytes(), multicast_addr)
+            .await
+        {
+            errors.push(format!("Failed to send multicast probe {}: {}", i + 1, e));
+        } else {
+            log::debug!("Sent multicast probe {} of 3", i + 1);
+        }
+        
+        if i < 2 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     // Send additional subnet probes if configured
     for subnet in &options.additional_subnets {
+        log::info!("Sending directed probes to subnet: {}", subnet);
         if let Err(e) = send_subnet_probes(&socket, &probe_message, subnet).await {
             errors.push(format!("Failed to probe subnet {}: {}", subnet, e));
         }
@@ -153,6 +163,8 @@ async fn collect_probe_responses(
     start_time: Instant,
 ) -> Result<(), DiscoveryError> {
     let mut buf = vec![0u8; 8192]; // Buffer for UDP packets
+    let mut consecutive_timeouts = 0;
+    const MAX_CONSECUTIVE_TIMEOUTS: u32 = 5;
 
     loop {
         // Break if we've reached the maximum number of results
@@ -161,8 +173,8 @@ async fn collect_probe_responses(
             break;
         }
 
-        // Receive response with short timeout to avoid hanging
-        match timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await {
+        // Receive response with moderate timeout to collect more responses
+        match timeout(Duration::from_millis(500), socket.recv_from(&mut buf)).await {
             Ok(Ok((len, src_addr))) => {
                 *responses_received += 1;
                 let response_time = start_time.elapsed();
@@ -227,10 +239,18 @@ async fn collect_probe_responses(
                 errors.push(error_msg);
             }
             Err(_) => {
-                // Timeout - this is normal, just continue
+                // Timeout - this is normal during collection
+                consecutive_timeouts += 1;
+                if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS {
+                    log::debug!("No responses for {} consecutive timeouts, ending collection", MAX_CONSECUTIVE_TIMEOUTS);
+                    break;
+                }
                 continue;
             }
         }
+        
+        // Reset timeout counter on successful receive
+        consecutive_timeouts = 0;
     }
 
     Ok(())
@@ -311,13 +331,26 @@ async fn send_subnet_probes(
         subnet_addrs.len()
     );
 
-    for addr in subnet_addrs {
-        let target = SocketAddr::new(IpAddr::V4(addr), super::WS_DISCOVERY_PORT);
-        if let Err(e) = socket.send_to(probe_message.as_bytes(), target).await {
-            log::debug!("Failed to send probe to {}: {}", target, e);
-            // Continue with other addresses - don't fail the whole subnet
+    // Send probes in batches with small delays to avoid overwhelming the network
+    for (i, addr) in subnet_addrs.iter().enumerate() {
+        let target = SocketAddr::new(IpAddr::V4(*addr), super::WS_DISCOVERY_PORT);
+        match socket.send_to(probe_message.as_bytes(), target).await {
+            Ok(bytes) => {
+                log::trace!("Sent {} byte probe to {}", bytes, target);
+            }
+            Err(e) => {
+                log::debug!("Failed to send probe to {}: {}", target, e);
+                // Continue with other addresses - don't fail the whole subnet
+            }
+        }
+        
+        // Small delay every 10 probes to avoid packet loss
+        if i > 0 && i % 10 == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
+    
+    log::info!("Sent probes to {} addresses in subnet {}", subnet_addrs.len(), subnet);
 
     Ok(())
 }
@@ -377,12 +410,17 @@ fn parse_subnet(subnet: &str) -> Result<Vec<Ipv4Addr>, DiscoveryError> {
     let network_addr = base_u32 & network_mask;
     let host_count = 1u32 << (32 - prefix_len);
 
-    // Skip network and broadcast addresses, and limit to reasonable number
-    let max_hosts = std::cmp::min(host_count.saturating_sub(2), 1024);
+    // Handle /32 (single host) specially
+    if prefix_len == 32 {
+        addresses.push(base_ip);
+    } else {
+        // Skip network and broadcast addresses, and limit to reasonable number
+        let max_hosts = std::cmp::min(host_count.saturating_sub(2), 1024);
 
-    for i in 1..=max_hosts {
-        let addr_u32 = network_addr + i;
-        addresses.push(Ipv4Addr::from(addr_u32));
+        for i in 1..=max_hosts {
+            let addr_u32 = network_addr + i;
+            addresses.push(Ipv4Addr::from(addr_u32));
+        }
     }
 
     Ok(addresses)

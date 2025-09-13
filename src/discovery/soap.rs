@@ -331,9 +331,9 @@ pub fn generate_get_services(username: Option<&str>, password: Option<&str>) -> 
 }
 
 pub fn generate_get_stream_uri(
-    profile_token: &str,
     username: Option<&str>,
     password: Option<&str>,
+    profile_token: &str,
 ) -> String {
     let auth_header = if let (Some(user), Some(pass)) = (username, password) {
         generate_wsse_auth_header(user, pass)
@@ -363,6 +363,32 @@ pub fn generate_get_stream_uri(
     </SOAP-ENV:Body>
 </SOAP-ENV:Envelope>"#,
         auth_header, profile_token
+    )
+}
+
+/// Generate PTZ GetCapabilities SOAP request
+pub fn generate_ptz_get_capabilities(username: Option<&str>, password: Option<&str>) -> String {
+    let auth_header = if let (Some(user), Some(pass)) = (username, password) {
+        generate_wsse_auth_header(user, pass)
+    } else {
+        String::new()
+    };
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope
+    xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"
+    xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+    xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+    xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+    <SOAP-ENV:Header>
+        {}
+    </SOAP-ENV:Header>
+    <SOAP-ENV:Body>
+        <tptz:GetCapabilities/>
+    </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>"#,
+        auth_header
     )
 }
 
@@ -397,23 +423,6 @@ fn generate_wsse_auth_header(username: &str, password: &str) -> String {
     )
 }
 
-/// SHA1 digest implementation
-fn sha1_digest(input: &str) -> Vec<u8> {
-    let mut hasher = Sha1::new();
-    hasher.update(input.as_bytes());
-    hasher.finalize().to_vec()
-}
-
-/// Format timestamp for WS-Security
-fn format_timestamp(timestamp: u64) -> String {
-    // Simple ISO 8601 format - in production, use chrono or similar
-    format!(
-        "2024-01-01T{:02}:{:02}:{:02}Z",
-        (timestamp / 3600) % 24,
-        (timestamp / 60) % 60,
-        timestamp % 60
-    )
-}
 
 #[cfg(test)]
 mod tests {
